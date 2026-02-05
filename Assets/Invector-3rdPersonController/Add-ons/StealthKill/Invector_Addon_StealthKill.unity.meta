@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 0f23aed8c4cda774ca26dbae8cdab157
+timeCreated: 1536786001
+licenseType: Store
+DefaultImporter:
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 135495
+  packageName: Invector Stealth Kill Add-on
+  packageVersion: 1.1
+  assetPath: Assets/Invector-3rdPersonController/Add-ons/StealthKill/Invector_Addon_StealthKill.unity
+  uploadId: 600583
