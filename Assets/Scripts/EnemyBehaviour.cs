@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEngine.AI;
 
 public class EnemyBehaviour : MonoBehaviour
@@ -6,16 +6,7 @@ public class EnemyBehaviour : MonoBehaviour
     [Header("References")]
     public NavMeshAgent agent;
     public Animator anim;
-    public AudioSource audioSource; // Optional: play footstep sounds
-
-    [Header("Footstep")]
-    public AudioClip[] footstepClips;
-    [Range(0f, 1f)] public float footstepVolume = 0.5f;
-
-    [Header("Patrol")]
-    public Transform[] waypoints;
-    public bool loop = true;
-    public float waitTimeAtWaypoint = 2f;
+    public GameObject ragdoll;
 
     [Header("Vision")]
     public Transform player;
@@ -23,16 +14,16 @@ public class EnemyBehaviour : MonoBehaviour
     public float viewAngle = 60f;
     public LayerMask obstacleMask;
 
-    [Header("Suspicion")]
-    public float suspicionTime = 2f;
-    public float searchTime = 4f;
+    [Header("Patrol")]
+    public Transform[] waypoints;
+    public bool loop = true;
+    public float waitTimeAtWaypoint = 2f;
 
-    [Header("State")]
-    public bool isDead = false;
-
-    private int index = 0;
-    private float timer = 0f;
+    private int index;
+    private float timer;
     private Vector3 lastKnownPlayerPos;
+
+    public bool isDead { get; private set; }
 
     private enum State
     {
@@ -49,23 +40,20 @@ public class EnemyBehaviour : MonoBehaviour
 
     void Start()
     {
-        if (!agent) agent = GetComponent<NavMeshAgent>();
+        agent = GetComponent<NavMeshAgent>();
         currentState = State.Patrolling;
 
         if (waypoints.Length > 0)
             agent.SetDestination(waypoints[0].position);
+
+        if (ragdoll)
+            ragdoll.SetActive(false);
     }
 
     void Update()
     {
-        if (isDead)
-        {
-            HandleDeath();
-            //UpdateAnimator(0f);
+        if (currentState == State.Dead)
             return;
-        }
-
-        //UpdateAnimator();
 
         switch (currentState)
         {
@@ -73,30 +61,89 @@ public class EnemyBehaviour : MonoBehaviour
                 Patrol();
                 LookForPlayer();
                 break;
+
             case State.Waiting:
                 WaitAtWaypoint();
                 LookForPlayer();
                 break;
+
             case State.Suspicious:
                 Suspicious();
                 break;
+
             case State.Investigating:
                 Investigate();
                 break;
+
             case State.Chasing:
                 Chase();
                 break;
+
             case State.Searching:
                 Search();
                 break;
         }
     }
 
-    // ---------------- STATES ----------------
+
+    public void Die()
+    {
+        if (isDead) return;
+
+        isDead = true;
+        currentState = State.Dead;
+
+        // STOP NAVMESH MOVEMENT BUT KEEP IT ENABLED
+        agent.isStopped = true;
+        agent.ResetPath();
+
+        // Freeze navmesh updates (no more movement)
+        agent.updatePosition = false;
+        agent.updateRotation = false;
+
+        // Optional safety snap
+        transform.position = agent.nextPosition;
+
+        // Play death animation
+        anim.SetTrigger("isDead");
+
+        // Switch to ragdoll after animation
+        Invoke(nameof(ActivateRagdoll), 2.25f);
+    }
+
+
+    void ActivateRagdoll()
+    {
+        anim.enabled = false;
+
+        // Detach ragdoll
+        ragdoll.transform.SetParent(null);
+        ragdoll.transform.position = transform.position;
+        ragdoll.transform.rotation = transform.rotation;
+        ragdoll.SetActive(true);
+
+        // Reset ragdoll physics
+        foreach (Rigidbody rb in ragdoll.GetComponentsInChildren<Rigidbody>())
+        {
+            rb.isKinematic = false;
+            rb.useGravity = true;
+            rb.linearVelocity = Vector3.zero;
+            rb.angularVelocity = Vector3.zero;
+        }
+
+        // Disable ONLY non-ragdoll colliders
+        foreach (Collider c in GetComponentsInChildren<Collider>())
+        {
+            if (!c.transform.IsChildOf(ragdoll.transform))
+                c.enabled = false;
+        }
+    }
+
+
     void Patrol()
     {
         anim.SetBool("Walk", true);
-        if (agent == null || !agent.enabled) return;
+
         if (!agent.pathPending && agent.remainingDistance <= agent.stoppingDistance)
         {
             agent.isStopped = true;
@@ -107,7 +154,6 @@ public class EnemyBehaviour : MonoBehaviour
 
     void WaitAtWaypoint()
     {
-        if (agent == null || !agent.enabled) return;
         anim.SetBool("Walk", false);
         timer += Time.deltaTime;
 
@@ -129,18 +175,15 @@ public class EnemyBehaviour : MonoBehaviour
             return;
         }
 
-        if (timer >= suspicionTime)
+        if (timer >= 2f)
         {
-            if (agent != null && agent.enabled)
-                agent.SetDestination(lastKnownPlayerPos);
+            agent.SetDestination(lastKnownPlayerPos);
             currentState = State.Investigating;
         }
     }
 
     void Investigate()
     {
-        if (agent == null || !agent.enabled) return;
-
         if (!agent.pathPending && agent.remainingDistance <= agent.stoppingDistance)
         {
             timer = 0f;
@@ -153,7 +196,6 @@ public class EnemyBehaviour : MonoBehaviour
 
     void Chase()
     {
-        if (player == null || agent == null || !agent.enabled) return;
         anim.SetBool("Walk", true);
         agent.SetDestination(player.position);
         lastKnownPlayerPos = player.position;
@@ -167,8 +209,6 @@ public class EnemyBehaviour : MonoBehaviour
 
     void Search()
     {
-        if (agent == null || !agent.enabled) return;
-
         timer += Time.deltaTime;
 
         if (CanSeePlayer())
@@ -177,14 +217,14 @@ public class EnemyBehaviour : MonoBehaviour
             return;
         }
 
-        if (timer >= searchTime)
+        if (timer >= 4f)
         {
             GoToNearestWaypoint();
             currentState = State.Patrolling;
         }
     }
 
-    // ---------------- VISION ----------------
+
     void LookForPlayer()
     {
         if (CanSeePlayer())
@@ -197,8 +237,6 @@ public class EnemyBehaviour : MonoBehaviour
 
     bool CanSeePlayer()
     {
-        if (!player) return false;
-
         Vector3 dir = (player.position - transform.position).normalized;
         float dist = Vector3.Distance(transform.position, player.position);
 
@@ -211,11 +249,9 @@ public class EnemyBehaviour : MonoBehaviour
         return true;
     }
 
-    // ---------------- HELPERS ----------------
+
     void GoToNextWaypoint()
     {
-        if (waypoints.Length == 0 || agent == null || !agent.enabled) return;
-
         index++;
         if (index >= waypoints.Length)
             index = loop ? 0 : waypoints.Length - 1;
@@ -225,8 +261,6 @@ public class EnemyBehaviour : MonoBehaviour
 
     void GoToNearestWaypoint()
     {
-        if (waypoints.Length == 0 || agent == null || !agent.enabled) return;
-
         float min = Mathf.Infinity;
         int nearest = 0;
 
@@ -243,85 +277,4 @@ public class EnemyBehaviour : MonoBehaviour
         index = nearest;
         agent.SetDestination(waypoints[index].position);
     }
-
-    // ---------------- ANIMATOR ----------------
-    void UpdateAnimator()
-    {
-        if (!anim || !agent) return;
-
-        //float speed = agent.velocity.magnitude;
-        //float normalizedSpeed = agent.speed > 0 ? speed / agent.speed : 0f;
-        anim.SetFloat("Speed", 1f);
-    }
-
-    void UpdateAnimator(float speed)
-    {
-        if (!anim) return;
-        anim.SetFloat("Speed", speed);
-    }
-
-    // ---------------- DEATH ----------------
-    public void KillEnemy()
-    {
-        isDead = true;
-        currentState = State.Dead;
-        HandleDeath();
-    }
-
-    public void HandleDeath()
-    {
-        if (!agent || !agent.enabled) return;
-
-        agent.isStopped = true;
-        agent.ResetPath();
-        agent.velocity = Vector3.zero;
-
-        agent.updatePosition = false;
-        agent.updateRotation = false;
-        // Optional: agent.enabled = false;
-    }
-
-    // ---------------- GIZMOS ----------------
-void OnDrawGizmos()
-{
-    if (waypoints == null || waypoints.Length == 0) return;
-
-    Gizmos.color = Color.cyan;
-
-    // Draw lines between waypoints
-    for (int i = 0; i < waypoints.Length - 1; i++)
-    {
-        if (waypoints[i] != null && waypoints[i + 1] != null)
-        {
-            Gizmos.DrawLine(waypoints[i].position, waypoints[i + 1].position);
-        }
-    }
-
-    // If loop, draw line from last to first
-    if (loop && waypoints.Length > 1 && waypoints[0] != null && waypoints[^1] != null)
-    {
-        Gizmos.DrawLine(waypoints[^1].position, waypoints[0].position);
-    }
-
-    // Draw spheres at each waypoint
-    Gizmos.color = Color.yellow;
-    foreach (var wp in waypoints)
-    {
-        if (wp != null)
-            Gizmos.DrawSphere(wp.position, 0.3f);
-    }
-}
-
-
-    // ---------------- FOOTSTEP EVENT ----------------
-    /*public void OnFootstep()
-    {
-        // This prevents the AnimationEvent warning
-        if (audioSource != null && footstepClips.Length > 0)
-        {
-            AudioClip clip = footstepClips[Random.Range(0, footstepClips.Length)];
-            audioSource.PlayOneShot(clip, footstepVolume);
-        }
-    }*/
-    
 }
