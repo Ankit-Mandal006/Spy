@@ -2,13 +2,14 @@ using UnityEngine;
 
 public class Enemy : MonoBehaviour
 {
-    public GameObject deathEffect;
+    public GameObject DeadEnemy;
+    public GameObject _Enemy;
 
     public void Die()
     {
-        if (deathEffect != null)
-            Instantiate(deathEffect, transform.position, Quaternion.identity);
+        if (DeadEnemy != null)
+            Instantiate(DeadEnemy, transform.position, Quaternion.identity);
 
-        Destroy(gameObject);
+        Destroy(_Enemy.gameObject);
     }
 }
