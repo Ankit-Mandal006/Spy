@@ -1,11 +1,10 @@
-Shader "Custom/EnemyFOV_WithSprite"
+Shader "Custom/EnemyFOV"
 {
     Properties
     {
-        _MainTex ("FOV Texture", 2D) = "white" {}
-        _Color ("Tint Color", Color) = (1,1,0,0.35)
-        _EdgeSoftness ("Edge Softness", Range(0.1,5)) = 2
-        _DistanceFade ("Distance Fade", Range(0.1,5)) = 1
+        _Color ("FOV Color", Color) = (1,0,0,0.35)
+        _EdgeSoftness ("Edge Softness", Range(0.5,4)) = 2
+        _DistanceFade ("Distance Fade", Range(0.5,4)) = 1.5
     }
 
     SubShader
@@ -17,9 +16,8 @@ Shader "Custom/EnemyFOV_WithSprite"
             "IgnoreProjector"="True"
         }
 
-        LOD 100
-        Cull Off
         ZWrite Off
+        Cull Off
         Blend SrcAlpha OneMinusSrcAlpha
 
         Pass
@@ -28,9 +26,6 @@ Shader "Custom/EnemyFOV_WithSprite"
             #pragma vertex vert
             #pragma fragment frag
             #include "UnityCG.cginc"
-
-            sampler2D _MainTex;
-            float4 _MainTex_ST;
 
             fixed4 _Color;
             float _EdgeSoftness;
@@ -52,25 +47,22 @@ Shader "Custom/EnemyFOV_WithSprite"
             {
                 v2f o;
                 o.vertex = UnityObjectToClipPos(v.vertex);
-                o.uv = TRANSFORM_TEX(v.uv, _MainTex);
+                o.uv = v.uv;
                 return o;
             }
 
             fixed4 frag (v2f i) : SV_Target
             {
-                // Sample texture
-                fixed4 tex = tex2D(_MainTex, i.uv);
+                // Soft sides of cone
+                float side = abs(i.uv.x - 0.5) * 2.0;
+                float edgeFade = saturate(1.0 - pow(side, _EdgeSoftness));
 
-                // Cone edge fade (left-right)
-                float x = abs(i.uv.x - 0.5) * 2.0;
-                float edgeFade = saturate(1.0 - pow(x, _EdgeSoftness));
-
-                // Distance fade (near-far)
+                // Fade with distance
                 float distFade = saturate(1.0 - pow(i.uv.y, _DistanceFade));
 
-                float alpha = tex.a * edgeFade * distFade * _Color.a;
+                float alpha = edgeFade * distFade * _Color.a;
 
-                return fixed4(tex.rgb * _Color.rgb, alpha);
+                return fixed4(_Color.rgb, alpha);
             }
             ENDCG
         }

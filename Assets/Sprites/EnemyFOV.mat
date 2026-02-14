@@ -107,10 +107,10 @@ Material:
     - _Cutoff: 0.5
     - _DetailAlbedoMapScale: 1
     - _DetailNormalMapScale: 1
-    - _DistanceFade: 5
+    - _DistanceFade: 2.19
     - _DstBlend: 0
     - _DstBlendAlpha: 0
-    - _EdgeSoftness: 5
+    - _EdgeSoftness: 2.39
     - _EnvironmentReflections: 1
     - _GlossMapScale: 0
     - _Glossiness: 0
