@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 using StarterAssets;
 
 public class Player_MoveWhileAim : MonoBehaviour
@@ -32,7 +32,7 @@ public class Player_MoveWhileAim : MonoBehaviour
 
     void Update()
     {
-        IsAiming = Input.GetMouseButton(1); // RMB
+        IsAiming = Input.GetMouseButton(1); // RMB to aim
 
         animator.SetBool(aimID, IsAiming);
 
@@ -40,18 +40,22 @@ public class Player_MoveWhileAim : MonoBehaviour
         {
             RotateTowardMouse();
             UpdateStrafeMovement();
-            tpc.SetSprintEnabled(false); // no sprint while aiming
+
+            if (tpc != null)
+                tpc.SetSprintEnabled(false); // disable sprint while aiming
         }
         else
         {
-            animator.SetFloat(movXID, 0);
-            animator.SetFloat(movYID, 0);
+            // Reset blend tree smoothly
+            animator.SetFloat(movXID, 0f, 0.1f, Time.deltaTime);
+            animator.SetFloat(movYID, 0f, 0.1f, Time.deltaTime);
         }
     }
 
     void RotateTowardMouse()
     {
         Ray ray = mainCamera.ScreenPointToRay(Input.mousePosition);
+
         if (Physics.Raycast(ray, out RaycastHit hit, 200f, groundLayer))
         {
             Vector3 dir = hit.point - transform.position;
@@ -71,16 +75,9 @@ public class Player_MoveWhileAim : MonoBehaviour
 
     void UpdateStrafeMovement()
     {
-        // Input relative to player forward/right
-        Vector3 forward = transform.forward;
-        Vector3 right = transform.right;
-
-        Vector3 move =
-            forward * input.move.y +
-            right * input.move.x;
-
-        float movX = Vector3.Dot(move, right);
-        float movY = Vector3.Dot(move, forward);
+        // Direct input values (THIS fixes W/S animation)
+        float movX = input.move.x; // A / D
+        float movY = input.move.y; // W / S
 
         animator.SetFloat(movXID, movX, 0.1f, Time.deltaTime);
         animator.SetFloat(movYID, movY, 0.1f, Time.deltaTime);
