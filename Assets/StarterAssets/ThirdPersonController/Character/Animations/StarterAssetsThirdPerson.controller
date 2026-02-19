@@ -128,7 +128,7 @@ BlendTree:
     m_DirectBlendParameter: Speed
     m_Mirror: 0
   m_BlendParameter: MovX
-  m_BlendParameterY: MoxY
+  m_BlendParameterY: MovY
   m_MinThreshold: 0
   m_MaxThreshold: 14
   m_UseAutomaticThresholds: 0
@@ -648,7 +648,7 @@ AnimatorController:
     m_DefaultInt: 0
     m_DefaultBool: 0
     m_Controller: {fileID: 9100000}
-  - m_Name: MoxY
+  - m_Name: MovY
     m_Type: 1
     m_DefaultFloat: 0
     m_DefaultInt: 0

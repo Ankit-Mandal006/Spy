@@ -8,49 +8,66 @@ public class Player_MoveWhileAim : MonoBehaviour
     public Camera mainCamera;
     public LayerMask groundLayer;
 
+    [Header("Rotation")]
+    public float rotationSpeed = 15f;
+
     private Animator animator;
     private StarterAssetsInputs input;
+    private CharacterController characterController;
 
     public bool IsAiming { get; private set; }
 
+    // Animator parameter hashes
     private int aimID;
     private int movXID;
-    private int movYID;
+    private int movYID; // named MovY in Animator but represents Z (forward/back)
 
     void Start()
     {
         animator = GetComponent<Animator>();
         input = GetComponent<StarterAssetsInputs>();
+        characterController = GetComponent<CharacterController>();
 
         if (mainCamera == null)
             mainCamera = Camera.main;
 
-        aimID = Animator.StringToHash("Aim");
+        aimID  = Animator.StringToHash("Aim");
         movXID = Animator.StringToHash("MovX");
-        movYID = Animator.StringToHash("MovY");
+        movYID = Animator.StringToHash("MovY"); // must match exactly in Animator window
     }
 
     void Update()
+{
+    bool wasAiming = IsAiming;
+    IsAiming = Input.GetMouseButton(1);
+
+    if (tpc != null)
+        tpc.AimMode = IsAiming;
+
+    animator.SetBool(aimID, IsAiming);
+
+    // Clear jump input the moment we stop aiming
+    // so the buffered jump doesn't fire instantly
+    if (wasAiming && !IsAiming)
+        input.jump = false;
+
+    if (IsAiming)
     {
-        IsAiming = Input.GetMouseButton(1); // RMB to aim
+        // Also suppress jump every frame while aiming
+        input.jump = false;
 
-        animator.SetBool(aimID, IsAiming);
+        RotateTowardMouse();
+        UpdateStrafeAnimation();
 
-        if (IsAiming)
-        {
-            RotateTowardMouse();
-            UpdateStrafeMovement();
-
-            if (tpc != null)
-                tpc.SetSprintEnabled(false); // disable sprint while aiming
-        }
-        else
-        {
-            // Reset blend tree smoothly
-            animator.SetFloat(movXID, 0f, 0.1f, Time.deltaTime);
-            animator.SetFloat(movYID, 0f, 0.1f, Time.deltaTime);
-        }
+        if (tpc != null)
+            tpc.SetSprintEnabled(false);
     }
+    else
+    {
+        animator.SetFloat(movXID, 0f, 0.1f, Time.deltaTime);
+        animator.SetFloat(movYID, 0f, 0.1f, Time.deltaTime);
+    }
+}
 
     void RotateTowardMouse()
     {
@@ -67,19 +84,22 @@ public class Player_MoveWhileAim : MonoBehaviour
                 transform.rotation = Quaternion.Slerp(
                     transform.rotation,
                     targetRot,
-                    Time.deltaTime * 15f
+                    Time.deltaTime * rotationSpeed
                 );
             }
         }
     }
 
-    void UpdateStrafeMovement()
-    {
-        // Direct input values (THIS fixes W/S animation)
-        float movX = input.move.x; // A / D
-        float movY = input.move.y; // W / S
+    void UpdateStrafeAnimation()
+{
+    Vector3 velocity = characterController.velocity;
+    velocity.y = 0f;
 
-        animator.SetFloat(movXID, movX, 0.1f, Time.deltaTime);
-        animator.SetFloat(movYID, movY, 0.1f, Time.deltaTime);
-    }
+    float localX = Mathf.Round(Vector3.Dot(velocity.normalized, transform.right));
+    float localZ = Mathf.Round(Vector3.Dot(velocity.normalized, transform.forward));
+
+    // Using direct strings to debug - check these match EXACTLY in Animator window
+    animator.SetFloat("MovX", localX, 0.1f, Time.deltaTime);
+    animator.SetFloat("MovY", localZ, 0.1f, Time.deltaTime);
+}
 }
