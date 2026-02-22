@@ -2635,7 +2635,7 @@ MonoBehaviour:
   eyeHeight: 1.5
   obstacleMask:
     serializedVersion: 2
-    m_Bits: 475
+    m_Bits: 411
   waypoints:
   - {fileID: 1232548329}
   - {fileID: 1525921576}
