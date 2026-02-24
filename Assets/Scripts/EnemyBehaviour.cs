@@ -3,14 +3,18 @@ using UnityEngine.AI;
 
 public class EnemyBehaviour : MonoBehaviour
 {
-     [Header("References")]
+    [Header("References")]
     public NavMeshAgent agent;
     public Animator anim;
     public GameObject ragdoll;
     public EnemyFOV fov;
-
-    [Header("Vision (SOURCE OF TRUTH)")]
     public Transform player;
+
+    [Header("Turning")]
+    public float idleTurnSpeed = 2f;
+    public float alertTurnSpeed = 6f;
+
+    [Header("Vision")]
     public float viewDistance = 12f;
     public float viewAngle = 60f;
     public float eyeHeight = 1.5f;
@@ -18,8 +22,8 @@ public class EnemyBehaviour : MonoBehaviour
 
     [Header("Patrol")]
     public Transform[] waypoints;
-    public bool loop = true;
     public float waitTimeAtWaypoint = 2f;
+    public bool loop = true;
 
     [Header("Look Around")]
     public float lookAngle = 45f;
@@ -28,34 +32,58 @@ public class EnemyBehaviour : MonoBehaviour
     [Header("Investigate")]
     public float investigateTime = 4f;
 
+    [Header("Hearing (MIMIC)")]
+    public float hearingRadius = 8f;
+    public float instantDetectDistance = 1.5f;
+
+    [Header("Detection Timers")]
+    public float detectTime = 0.6f;
+    public float loseTime = 0.8f;
+
     // ── Runtime ─────────────────────────────
     bool _canSee;
-    public bool CanSeeTarget => _canSee;
+    float _detectTimer;
+    float _loseTimer;
 
     Vector3 _lastKnownPos;
     Quaternion _baseRotation;
     float _timer;
+    int _wpIndex;
     int _index;
 
-    enum State { Patrolling, Waiting, Chasing, Investigating, Searching, Dead }
+    public bool CanSeeTarget => _canSee;
+
+    enum State
+    {
+        Patrolling,
+        Waiting,
+        Suspicious,
+        Investigating,
+        Searching,
+        Chasing,
+        Dead
+    }
     State _state;
+
+    int walkID;
 
     void Start()
     {
-        if (!agent) agent = GetComponent<NavMeshAgent>();
-        if (!fov) fov = GetComponentInChildren<EnemyFOV>();
+        agent ??= GetComponent<NavMeshAgent>();
+        agent.updateRotation = false;
 
-        // 🔗 SYNC FOV VISUAL WITH LOGIC
+        walkID = Animator.StringToHash("Walk");
+
         if (fov)
         {
             fov.viewRadius = viewDistance;
             fov.viewAngle = viewAngle;
         }
 
-        _state = State.Patrolling;
-
         if (waypoints.Length > 0)
             agent.SetDestination(waypoints[0].position);
+
+        ChangeState(State.Patrolling);
 
         if (ragdoll) ragdoll.SetActive(false);
     }
@@ -64,153 +92,242 @@ public class EnemyBehaviour : MonoBehaviour
     {
         if (_state == State.Dead) return;
 
-        _canSee = CanSeePlayer();
-        if (fov) fov.SetAlert(_canSee);
+        UpdateVision();
+        RunState();
+        UpdateAnimation();
+    }
 
+    // ── STATE MACHINE ──────────────────────
+    void RunState()
+    {
         switch (_state)
         {
-            case State.Patrolling: OnPatrol(); break;
-            case State.Waiting: OnWait(); break;
-            case State.Chasing: OnChase(); break;
-            case State.Investigating: OnInvestigate(); break;
-            case State.Searching: OnSearch(); break;
+            case State.Patrolling: Patrol(); break;
+            case State.Waiting: Wait(); break;
+            case State.Suspicious: Suspicious(); break;
+            case State.Investigating: Investigate(); break;
+            case State.Searching: Search(); break;
+            case State.Chasing: Chase(); break;
         }
     }
 
-    // ── STATES ──────────────────────────────
-    void OnPatrol()
+    void ChangeState(State next)
     {
-        anim.SetBool("Walk", true);
+        _state = next;
+        _timer = 0f;
 
-        if (_canSee) EnterChase();
-
-        if (!agent.pathPending && agent.remainingDistance <= agent.stoppingDistance)
-        {
-            agent.isStopped = true;
-            _timer = 0f;
-            _baseRotation = transform.rotation;
-            _state = State.Waiting;
-        }
+        agent.isStopped =
+            next == State.Waiting ||
+            next == State.Suspicious ||
+            next == State.Searching;
     }
 
-    void OnWait()
+    // ── STATES ─────────────────────────────
+    void Patrol()
+{
+    RotateTowardsMovement(idleTurnSpeed);
+
+    if (_canSee)
+        ChangeState(State.Suspicious);
+
+    if (!agent.pathPending && agent.remainingDistance <= agent.stoppingDistance)
     {
-        anim.SetBool("Walk", false);
-        _timer += Time.deltaTime;
+        _baseRotation = transform.rotation;
+        ChangeState(State.Waiting);
+    }
+}
 
-        float yaw = Mathf.Sin(_timer * lookSpeed) * lookAngle;
-        transform.rotation = _baseRotation * Quaternion.Euler(0, yaw, 0);
+    void Wait()
+    {
+        LookAround();
 
-        if (_canSee) EnterChase();
+        if (_canSee)
+            ChangeState(State.Suspicious);
 
         if (_timer >= waitTimeAtWaypoint)
         {
-            transform.rotation = _baseRotation;
-            agent.isStopped = false;
-            GoToNextWaypoint();
-            _state = State.Patrolling;
+            GoNextWaypoint();
+            ChangeState(State.Patrolling);
         }
     }
 
-    void OnChase()
+    void Suspicious()
     {
-        anim.SetBool("Walk", true);
-        agent.isStopped = false;
-        agent.SetDestination(player.position);
-        _lastKnownPos = player.position;
+        SmoothTurnTowards(player.position, alertTurnSpeed);
 
-        if (!_canSee)
-        {
-            agent.SetDestination(_lastKnownPos);
-            _timer = 0f;
-            _state = State.Investigating;
-        }
+        if (_detectTimer >= detectTime)
+            ChangeState(State.Chasing);
+
+        if (_loseTimer >= loseTime)
+            ChangeState(State.Patrolling);
     }
 
-    void OnInvestigate()
+    void Chase()
+{
+    agent.SetDestination(player.position);
+    _lastKnownPos = player.position;
+
+    RotateTowardsMovement(alertTurnSpeed);
+
+    if (!_canSee)
+        ChangeState(State.Investigating);
+}
+
+    void Investigate()
+{
+    agent.SetDestination(_lastKnownPos);
+
+    RotateTowardsMovement(alertTurnSpeed);
+
+    if (_canSee)
+        ChangeState(State.Chasing);
+
+    if (!agent.pathPending && agent.remainingDistance <= agent.stoppingDistance)
     {
-        anim.SetBool("Walk", true);
-
-        if (_canSee) EnterChase();
-
-        if (!agent.pathPending && agent.remainingDistance <= agent.stoppingDistance)
-        {
-            agent.isStopped = true;
-            _timer = 0f;
-            _baseRotation = transform.rotation;
-            _state = State.Searching;
-        }
+        _baseRotation = transform.rotation;
+        ChangeState(State.Searching);
     }
+}
 
-    void OnSearch()
+    void Search()
     {
-        anim.SetBool("Walk", false);
-        _timer += Time.deltaTime;
+        LookAround(1.4f);
 
-        float yaw = Mathf.Sin(_timer * lookSpeed * 0.7f) * lookAngle * 1.4f;
-        transform.rotation = _baseRotation * Quaternion.Euler(0, yaw, 0);
-
-        if (_canSee) EnterChase();
+        if (_canSee)
+            ChangeState(State.Chasing);
 
         if (_timer >= investigateTime)
         {
-            transform.rotation = _baseRotation;
-            agent.isStopped = false;
-            GoToNearestWaypoint();
-            _state = State.Patrolling;
+            GoNearestWaypoint();
+            ChangeState(State.Patrolling);
         }
     }
 
-    void EnterChase()
+    // ── HEARING (MIMIC SYSTEM) ──────────────
+    public void ReceiveNoise(Vector3 noisePos, float loudness)
     {
-        _lastKnownPos = player.position;
-        agent.isStopped = false;
-        _state = State.Chasing;
+        if (_state == State.Dead) return;
+
+        float dist = Vector3.Distance(transform.position, noisePos);
+
+        if (dist > hearingRadius * loudness && dist > instantDetectDistance)
+            return;
+
+        _lastKnownPos = noisePos;
+
+        if (_state == State.Patrolling || _state == State.Waiting)
+        {
+            ChangeState(State.Suspicious);
+        }
+        else if (_state == State.Suspicious)
+        {
+            ChangeState(State.Investigating);
+        }
     }
 
-    // ── VISION ──────────────────────────────
+    // ── VISION ─────────────────────────────
+    void UpdateVision()
+    {
+        bool sees = CanSeePlayer();
+
+        if (sees)
+        {
+            _detectTimer += Time.deltaTime;
+            _loseTimer = 0f;
+        }
+        else
+        {
+            _detectTimer = 0f;
+            _loseTimer += Time.deltaTime;
+        }
+
+        _canSee = sees;
+        if (fov) fov.SetAlert(sees);
+    }
+
     bool CanSeePlayer()
     {
         if (!player) return false;
 
-        Vector3 eyeOrigin = transform.position + Vector3.up * eyeHeight;
-        Vector3 eyeTarget = player.position + Vector3.up * eyeHeight;
+        Vector3 eye = transform.position + Vector3.up * eyeHeight;
+        Vector3 target = player.position + Vector3.up * eyeHeight;
 
-        float dist = Vector3.Distance(eyeOrigin, eyeTarget);
+        Vector3 dir = target - eye;
+        float dist = dir.magnitude;
+
         if (dist > viewDistance) return false;
-
-        Vector3 dir = (eyeTarget - eyeOrigin).normalized;
         if (Vector3.Angle(transform.forward, dir) > viewAngle * 0.5f) return false;
-
-        if (Physics.Raycast(eyeOrigin, dir, dist, obstacleMask))
-            return false;
+        if (Physics.Raycast(eye, dir.normalized, dist, obstacleMask)) return false;
 
         return true;
     }
 
-    // ── WAYPOINTS ───────────────────────────
-    void GoToNextWaypoint()
+    // ── HELPERS ────────────────────────────
+    void SmoothTurnTowards(Vector3 worldPos, float speed)
     {
-        if (waypoints.Length == 0) return;
-        _index = (_index + 1) % waypoints.Length;
-        agent.SetDestination(waypoints[_index].position);
+        Vector3 dir = worldPos - transform.position;
+        dir.y = 0f;
+
+        if (dir.sqrMagnitude < 0.01f) return;
+
+        Quaternion target = Quaternion.LookRotation(dir);
+        transform.rotation = Quaternion.Slerp(
+            transform.rotation,
+            target,
+            Time.deltaTime * speed
+        );
     }
 
-    void GoToNearestWaypoint()
+    void LookAround(float mult = 1f)
+    {
+        _timer += Time.deltaTime;
+        float yaw = Mathf.Sin(_timer * lookSpeed) * lookAngle * mult;
+        transform.rotation = _baseRotation * Quaternion.Euler(0, yaw, 0);
+    }
+
+    void GoNextWaypoint()
     {
         if (waypoints.Length == 0) return;
 
-        float min = Mathf.Infinity;
-        int nearest = 0;
+        _wpIndex++;
+        if (_wpIndex >= waypoints.Length)
+            _wpIndex = loop ? 0 : waypoints.Length - 1;
 
+        agent.SetDestination(waypoints[_wpIndex].position);
+    }
+    void RotateTowardsMovement(float turnSpeed)
+{
+    if (agent.velocity.sqrMagnitude < 0.05f) return;
+
+    Vector3 dir = agent.velocity.normalized;
+    dir.y = 0f;
+
+    Quaternion targetRot = Quaternion.LookRotation(dir);
+
+    transform.rotation = Quaternion.Slerp(
+        transform.rotation,
+        targetRot,
+        Time.deltaTime * turnSpeed
+    );
+}
+
+    void GoNearestWaypoint()
+    {
+        if (waypoints.Length == 0) return;
+
+        float min = float.MaxValue;
         for (int i = 0; i < waypoints.Length; i++)
         {
             float d = Vector3.Distance(transform.position, waypoints[i].position);
-            if (d < min) { min = d; nearest = i; }
+            if (d < min) { min = d; _wpIndex = i; }
         }
+        agent.SetDestination(waypoints[_wpIndex].position);
+    }
 
-        _index = nearest;
-        agent.SetDestination(waypoints[_index].position);
+    void UpdateAnimation()
+    {
+        bool moving = agent.velocity.magnitude > 0.1f && !agent.isStopped;
+        anim.SetBool(walkID, moving);
     }
 
     // ── Editor Gizmos ──────────────────────────────────────────────
