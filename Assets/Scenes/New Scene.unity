@@ -657,6 +657,37 @@ Transform:
   m_Children: []
   m_Father: {fileID: 720107645}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &639377869
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 639377870}
+  m_Layer: 3
+  m_Name: Shooting point
+  m_TagString: Untagged
+  m_Icon: {fileID: 3443629218296621865, guid: 0000000000000000d000000000000000, type: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &639377870
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 639377869}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 1.263, z: 0.411}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 934146821}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1001 &696734235
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -1007,6 +1038,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 6794978574611549760, guid: 7166087c57f18214f9cc1622ff2e3113, type: 3}
       insertIndex: -1
       addedObject: {fileID: 1578975960}
+    - targetCorrespondingSourceObject: {fileID: 8567136432372391834, guid: 7166087c57f18214f9cc1622ff2e3113, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 639377870}
     m_AddedComponents:
     - targetCorrespondingSourceObject: {fileID: 1021034596772366858, guid: 7166087c57f18214f9cc1622ff2e3113, type: 3}
       insertIndex: -1
@@ -1026,6 +1060,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 9056533917542991136, guid: 7166087c57f18214f9cc1622ff2e3113, type: 3}
       insertIndex: -1
       addedObject: {fileID: 934146820}
+    - targetCorrespondingSourceObject: {fileID: 9056533917542991136, guid: 7166087c57f18214f9cc1622ff2e3113, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 934146822}
     - targetCorrespondingSourceObject: {fileID: 4580577055529723196, guid: 7166087c57f18214f9cc1622ff2e3113, type: 3}
       insertIndex: -1
       addedObject: {fileID: 696734255}
@@ -1811,6 +1848,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 4416926081852918481, guid: 64dce48905ffd9b4293e595fa6941544, type: 3}
       insertIndex: -1
       addedObject: {fileID: 720107661}
+    - targetCorrespondingSourceObject: {fileID: 4416926081852918481, guid: 64dce48905ffd9b4293e595fa6941544, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 720107662}
   m_SourcePrefab: {fileID: 100100000, guid: 64dce48905ffd9b4293e595fa6941544, type: 3}
 --- !u!1 &720107642 stripped
 GameObject:
@@ -1929,6 +1969,20 @@ CapsuleCollider:
   m_Height: 1.75
   m_Direction: 1
   m_Center: {x: 0, y: 0.93, z: 0}
+--- !u!114 &720107662
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 720107642}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1ee892b0eeba37846bfe961c00e594be, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerDeath
+  ragdollPrefab: {fileID: 2590713735066954116, guid: 973707f090dfc034081718099db6d00d, type: 3}
+  animator: {fileID: 720107644}
 --- !u!1 &732817004 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 4238473855947006353, guid: 7166087c57f18214f9cc1622ff2e3113, type: 3}
@@ -2627,11 +2681,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   agent: {fileID: 934146818}
   anim: {fileID: 79516141}
-  ragdoll: {fileID: 0}
+  ragdoll: {fileID: 2590713735066954116, guid: 973707f090dfc034081718099db6d00d, type: 3}
   fov: {fileID: 1968237630}
   player: {fileID: 720107645}
   viewDistance: 12
-  viewAngle: 60
+  viewAngle: 30
   eyeHeight: 1.5
   obstacleMask:
     serializedVersion: 2
@@ -2689,6 +2743,24 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 8567136432372391834, guid: 7166087c57f18214f9cc1622ff2e3113, type: 3}
   m_PrefabInstance: {fileID: 696734235}
   m_PrefabAsset: {fileID: 0}
+--- !u!114 &934146822
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 696734250}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 92201a7e9c1ebdb4fb12ffd73539c34e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::EnemyShooter
+  enemyAI: {fileID: 934146817}
+  shootPoint: {fileID: 639377870}
+  hitMask:
+    serializedVersion: 2
+    m_Bits: 65
+  fireRate: 1
 --- !u!1 &986035990
 GameObject:
   m_ObjectHideFlags: 0
@@ -4972,9 +5044,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: fd79998acb6261b41b8c75bd3669bb85, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemyFOV
-  viewRadius: 6
+  viewRadius: 15
   viewAngle: 90
-  rayCount: 50
+  rayCount: 30
   rayHeight: 1.5
   obstacleLayer:
     serializedVersion: 2
@@ -5266,8 +5338,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemyIndicator
   indicatorRenderer: {fileID: 2060221024}
-  normalColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
-  alertColor: {r: 1, g: 0, b: 0, a: 1}
+  normalColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 0.4745098}
+  alertColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
   enemyLayer:
     serializedVersion: 2
     m_Bits: 8

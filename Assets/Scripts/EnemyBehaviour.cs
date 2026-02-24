@@ -3,56 +3,54 @@ using UnityEngine.AI;
 
 public class EnemyBehaviour : MonoBehaviour
 {
-    [Header("References")]
+     [Header("References")]
     public NavMeshAgent agent;
-    public Animator     anim;
-    public GameObject   ragdoll;
-    public EnemyFOV     fov;
+    public Animator anim;
+    public GameObject ragdoll;
+    public EnemyFOV fov;
 
-    [Header("Vision")]
+    [Header("Vision (SOURCE OF TRUTH)")]
     public Transform player;
     public float viewDistance = 12f;
-    public float viewAngle    = 60f;
-    public float eyeHeight    = 1.5f;
+    public float viewAngle = 60f;
+    public float eyeHeight = 1.5f;
     public LayerMask obstacleMask;
 
     [Header("Patrol")]
     public Transform[] waypoints;
-    public bool  loop               = true;
+    public bool loop = true;
     public float waitTimeAtWaypoint = 2f;
 
-    [Header("Look Around (Waiting)")]
+    [Header("Look Around")]
     public float lookAngle = 45f;
     public float lookSpeed = 1.2f;
 
-    [Header("Chase / Investigate")]
-    public float investigateTime = 4f;   // how long enemy searches last known pos before giving up
+    [Header("Investigate")]
+    public float investigateTime = 4f;
 
-    // ── Private ────────────────────────────────────────────────────
-    private int        _index;
-    private float      _timer;
-    private Vector3    _lastKnownPos;
-    private Quaternion _baseRotation;
-    private bool       _canSee;
+    // ── Runtime ─────────────────────────────
+    bool _canSee;
+    public bool CanSeeTarget => _canSee;
 
-    public bool isDead { get; private set; }
+    Vector3 _lastKnownPos;
+    Quaternion _baseRotation;
+    float _timer;
+    int _index;
 
-    private enum State
-    {
-        Patrolling,     // walking between waypoints
-        Waiting,        // standing at a waypoint, looking around
-        Chasing,        // actively following player
-        Investigating,  // walking to last known position
-        Searching,      // standing at last known pos, looking around before giving up
-        Dead
-    }
-    private State _state;
+    enum State { Patrolling, Waiting, Chasing, Investigating, Searching, Dead }
+    State _state;
 
-    // ──────────────────────────────────────────────────────────────
     void Start()
     {
-        if (agent == null) agent = GetComponent<NavMeshAgent>();
-        if (fov    == null) fov  = GetComponentInChildren<EnemyFOV>();
+        if (!agent) agent = GetComponent<NavMeshAgent>();
+        if (!fov) fov = GetComponentInChildren<EnemyFOV>();
+
+        // 🔗 SYNC FOV VISUAL WITH LOGIC
+        if (fov)
+        {
+            fov.viewRadius = viewDistance;
+            fov.viewAngle = viewAngle;
+        }
 
         _state = State.Patrolling;
 
@@ -67,59 +65,53 @@ public class EnemyBehaviour : MonoBehaviour
         if (_state == State.Dead) return;
 
         _canSee = CanSeePlayer();
-        if (fov != null) fov.SetAlert(_canSee);
+        if (fov) fov.SetAlert(_canSee);
 
         switch (_state)
         {
-            case State.Patrolling:    OnPatrol();    break;
-            case State.Waiting:       OnWait();      break;
-            case State.Chasing:       OnChase();     break;
+            case State.Patrolling: OnPatrol(); break;
+            case State.Waiting: OnWait(); break;
+            case State.Chasing: OnChase(); break;
             case State.Investigating: OnInvestigate(); break;
-            case State.Searching:     OnSearch();    break;
+            case State.Searching: OnSearch(); break;
         }
     }
 
-    // ── PATROL ────────────────────────────────────────────────────
-    // Walk between waypoints in order. Spot player → Chase.
+    // ── STATES ──────────────────────────────
     void OnPatrol()
     {
         anim.SetBool("Walk", true);
 
-        if (_canSee) { EnterChase(); return; }
+        if (_canSee) EnterChase();
 
         if (!agent.pathPending && agent.remainingDistance <= agent.stoppingDistance)
         {
             agent.isStopped = true;
-            _timer          = 0f;
-            _baseRotation   = transform.rotation;
-            _state          = State.Waiting;
+            _timer = 0f;
+            _baseRotation = transform.rotation;
+            _state = State.Waiting;
         }
     }
 
-    // ── WAIT ──────────────────────────────────────────────────────
-    // Stand at waypoint, look left/right. Spot player → Chase.
     void OnWait()
     {
         anim.SetBool("Walk", false);
         _timer += Time.deltaTime;
 
-        // Sine-wave head turn
-        float yaw          = Mathf.Sin(_timer * lookSpeed) * lookAngle;
-        transform.rotation = _baseRotation * Quaternion.Euler(0f, yaw, 0f);
+        float yaw = Mathf.Sin(_timer * lookSpeed) * lookAngle;
+        transform.rotation = _baseRotation * Quaternion.Euler(0, yaw, 0);
 
-        if (_canSee) { EnterChase(); return; }
+        if (_canSee) EnterChase();
 
         if (_timer >= waitTimeAtWaypoint)
         {
             transform.rotation = _baseRotation;
-            agent.isStopped    = false;
+            agent.isStopped = false;
             GoToNextWaypoint();
             _state = State.Patrolling;
         }
     }
 
-    // ── CHASE ─────────────────────────────────────────────────────
-    // Follow the player. Lose sight → Investigate last known position.
     void OnChase()
     {
         anim.SetBool("Walk", true);
@@ -129,105 +121,94 @@ public class EnemyBehaviour : MonoBehaviour
 
         if (!_canSee)
         {
-            // Lost the player — go investigate where we last saw them
             agent.SetDestination(_lastKnownPos);
             _timer = 0f;
             _state = State.Investigating;
         }
     }
 
-    // ── INVESTIGATE ───────────────────────────────────────────────
-    // Walk to last known position. Spot player again → Chase.
-    // Arrive at destination → Search (look around briefly).
     void OnInvestigate()
     {
         anim.SetBool("Walk", true);
-        agent.isStopped = false;
 
-        if (_canSee) { EnterChase(); return; }
+        if (_canSee) EnterChase();
 
         if (!agent.pathPending && agent.remainingDistance <= agent.stoppingDistance)
         {
-            _timer        = 0f;
-            _baseRotation = transform.rotation;
             agent.isStopped = true;
-            _state        = State.Searching;
+            _timer = 0f;
+            _baseRotation = transform.rotation;
+            _state = State.Searching;
         }
     }
 
-    // ── SEARCH ────────────────────────────────────────────────────
-    // Stand at last known position, look around. Spot player → Chase.
-    // Timer expires → resume patrol.
     void OnSearch()
     {
         anim.SetBool("Walk", false);
         _timer += Time.deltaTime;
 
-        // Look around while searching
-        float yaw          = Mathf.Sin(_timer * lookSpeed * 0.7f) * lookAngle * 1.4f;
-        transform.rotation = _baseRotation * Quaternion.Euler(0f, yaw, 0f);
+        float yaw = Mathf.Sin(_timer * lookSpeed * 0.7f) * lookAngle * 1.4f;
+        transform.rotation = _baseRotation * Quaternion.Euler(0, yaw, 0);
 
-        if (_canSee) { EnterChase(); return; }
+        if (_canSee) EnterChase();
 
         if (_timer >= investigateTime)
         {
             transform.rotation = _baseRotation;
-            agent.isStopped    = false;
+            agent.isStopped = false;
             GoToNearestWaypoint();
             _state = State.Patrolling;
         }
     }
 
-    // ── Helpers ────────────────────────────────────────────────────
     void EnterChase()
     {
-        _lastKnownPos   = player.position;
+        _lastKnownPos = player.position;
         agent.isStopped = false;
-        _state          = State.Chasing;
+        _state = State.Chasing;
     }
 
-    // ── Vision ─────────────────────────────────────────────────────
+    // ── VISION ──────────────────────────────
     bool CanSeePlayer()
     {
-        if (player == null) return false;
+        if (!player) return false;
 
-        Vector3 toPlayer = player.position - transform.position;
-        float   dist     = toPlayer.magnitude;
-
-        if (dist > viewDistance) return false;
-        if (Vector3.Angle(transform.forward, toPlayer) > viewAngle * 0.5f) return false;
-
-        // Eye-to-eye raycast — obstacleMask must NOT include the player's layer
         Vector3 eyeOrigin = transform.position + Vector3.up * eyeHeight;
-        Vector3 eyeTarget = player.position    + Vector3.up * eyeHeight;
-        float   eyeDist   = Vector3.Distance(eyeOrigin, eyeTarget);
+        Vector3 eyeTarget = player.position + Vector3.up * eyeHeight;
 
-        if (Physics.Raycast(eyeOrigin, (eyeTarget - eyeOrigin).normalized, eyeDist, obstacleMask))
+        float dist = Vector3.Distance(eyeOrigin, eyeTarget);
+        if (dist > viewDistance) return false;
+
+        Vector3 dir = (eyeTarget - eyeOrigin).normalized;
+        if (Vector3.Angle(transform.forward, dir) > viewAngle * 0.5f) return false;
+
+        if (Physics.Raycast(eyeOrigin, dir, dist, obstacleMask))
             return false;
 
         return true;
     }
 
-   
-  
-    // ── Waypoint helpers ───────────────────────────────────────────
+    // ── WAYPOINTS ───────────────────────────
     void GoToNextWaypoint()
     {
         if (waypoints.Length == 0) return;
-        _index = (_index + 1) % (loop ? waypoints.Length : Mathf.Max(waypoints.Length, 1));
-        if (!loop) _index = Mathf.Min(_index, waypoints.Length - 1);
+        _index = (_index + 1) % waypoints.Length;
         agent.SetDestination(waypoints[_index].position);
     }
 
     void GoToNearestWaypoint()
     {
         if (waypoints.Length == 0) return;
-        float min = Mathf.Infinity; int nearest = 0;
+
+        float min = Mathf.Infinity;
+        int nearest = 0;
+
         for (int i = 0; i < waypoints.Length; i++)
         {
             float d = Vector3.Distance(transform.position, waypoints[i].position);
             if (d < min) { min = d; nearest = i; }
         }
+
         _index = nearest;
         agent.SetDestination(waypoints[_index].position);
     }
